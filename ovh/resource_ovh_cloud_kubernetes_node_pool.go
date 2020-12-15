@@ -13,16 +13,16 @@ import (
 	"github.com/ovh/go-ovh/ovh"
 )
 
-func resourceCloudKubernetesNodePool() *schema.Resource {
+func resourceCloudProjectKubeNodePool() *schema.Resource {
 	return &schema.Resource{
-		CreateContext: resourceCloudKubernetesNodePoolCreate,
-		Read:          resourceCloudKubernetesNodePoolRead,
-		DeleteContext: resourceCloudKubernetesNodePoolDelete,
-		UpdateContext: resourceCloudKubernetesNodePoolUpdate,
+		CreateContext: resourceCloudProjectKubeNodePoolCreate,
+		Read:          resourceCloudProjectKubeNodePoolRead,
+		DeleteContext: resourceCloudProjectKubeNodePoolDelete,
+		UpdateContext: resourceCloudProjectKubeNodePoolUpdate,
 
 		Importer: &schema.ResourceImporter{
 			StateContext: func(ctx context.Context, d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
-				err := resourceCloudKubernetesNodePoolRead(d, meta)
+				err := resourceCloudProjectKubeNodePoolRead(d, meta)
 				return []*schema.ResourceData{d}, err
 			},
 		},
@@ -81,14 +81,14 @@ func resourceCloudKubernetesNodePool() *schema.Resource {
 	}
 }
 
-func resourceCloudKubernetesNodePoolUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) (diags diag.Diagnostics) {
+func resourceCloudProjectKubeNodePoolUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) (diags diag.Diagnostics) {
 	config := meta.(*Config)
 
 	projectId := d.Get("project_id").(string)
 	clusterId := d.Get("cluster_id").(string)
 	poolId := d.Id()
 
-	params := &CloudKubernetesNodePoolUpdateRequest{
+	params := &CloudProjectKubeNodePoolUpdateRequest{
 		DesiredNodes: d.Get("desired_nodes").(int),
 		MaxNodes:     d.Get("max_nodes").(int),
 		MinNodes:     d.Get("min_nodes").(int),
@@ -98,23 +98,25 @@ func resourceCloudKubernetesNodePoolUpdate(ctx context.Context, d *schema.Resour
 
 	endpoint := fmt.Sprintf("/cloud/project/%s/kube/%s/nodepool/%s", projectId, clusterId, poolId)
 
+	log.Printf("[DEBUG] Will update nodepool: %+v", params)
+
 	err := config.OVHClient.Put(endpoint, params, nil)
 	if err != nil {
 		diags = append(diags, diag.Diagnostic{
 			Severity:      diag.Error,
-			Summary:       "Failed to update node pool",
+			Summary:       "Failed to update nodepool",
 			Detail:        err.Error(),
 			AttributePath: nil,
 		})
 		return
 	}
 
-	log.Printf("[DEBUG] Waiting for Node %s:", poolId)
+	log.Printf("[DEBUG] Waiting for nodepool %s to be READY", poolId)
 
 	stateConf := &resource.StateChangeConf{
 		Pending:    []string{"INSTALLING", "UPDATING", "REDEPLOYING", "RESIZING"},
 		Target:     []string{"READY"},
-		Refresh:    waitForCloudKubernetesNodePoolActive(config.OVHClient, projectId, clusterId, poolId),
+		Refresh:    waitForCloudProjectKubeNodePoolActive(config.OVHClient, projectId, clusterId, poolId),
 		Timeout:    45 * time.Minute,
 		Delay:      5 * time.Second,
 		MinTimeout: 3 * time.Second,
@@ -125,7 +127,7 @@ func resourceCloudKubernetesNodePoolUpdate(ctx context.Context, d *schema.Resour
 		{
 			diags = append(diags, diag.Diagnostic{
 				Severity:      diag.Error,
-				Summary:       "Failed to get node pool ready",
+				Summary:       "Timeout while waiting nodepool to be READY",
 				Detail:        err.Error(),
 				AttributePath: nil,
 			})
@@ -133,12 +135,14 @@ func resourceCloudKubernetesNodePoolUpdate(ctx context.Context, d *schema.Resour
 		}
 	}
 
-	err = resourceCloudKubernetesNodePoolRead(d, meta)
+	log.Printf("[DEBUG] nodepool %s is READY", poolId)
+
+	err = resourceCloudProjectKubeNodePoolRead(d, meta)
 
 	if err != nil {
 		diags = append(diags, diag.Diagnostic{
 			Severity:      diag.Error,
-			Summary:       "Failed to read node pool",
+			Summary:       "Failed to read nodepool",
 			Detail:        err.Error(),
 			AttributePath: nil,
 		})
@@ -151,12 +155,13 @@ func resourceCloudKubernetesNodePoolUpdate(ctx context.Context, d *schema.Resour
 
 }
 
-func resourceCloudKubernetesNodePoolCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) (diags diag.Diagnostics) {
+func resourceCloudProjectKubeNodePoolCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) (diags diag.Diagnostics) {
 	config := meta.(*Config)
 
 	projectId := d.Get("project_id").(string)
 	clusterId := d.Get("cluster_id").(string)
-	params := &CloudKubernetesNodePoolCreationRequest{
+
+	params := &CloudProjectKubeNodePoolCreationRequest{
 		Name:          d.Get("name").(string),
 		FlavorName:    d.Get("flavor").(string),
 		DesiredNodes:  d.Get("desired_nodes").(int),
@@ -165,19 +170,19 @@ func resourceCloudKubernetesNodePoolCreate(ctx context.Context, d *schema.Resour
 		MonthlyBilled: d.Get("monthly_billed").(bool),
 	}
 
-	r := &CloudKubernetesNodePoolResponse{}
-
-	log.Printf("[DEBUG] Will create public cloud kubernetes cluster: %s", params)
+	r := &CloudProjectKubeNodePoolResponse{}
 
 	d.Partial(true)
 
 	endpoint := fmt.Sprintf("/cloud/project/%s/kube/%s/nodepool", projectId, clusterId)
 
+	log.Printf("[DEBUG] Will create nodepool: %+v", params)
+
 	err := config.OVHClient.Post(endpoint, params, r)
 	if err != nil {
 		diags = append(diags, diag.Diagnostic{
 			Severity:      diag.Error,
-			Summary:       "Failed to create node pool",
+			Summary:       "Failed to create nodepool",
 			Detail:        err.Error(),
 			AttributePath: nil,
 		})
@@ -186,25 +191,35 @@ func resourceCloudKubernetesNodePoolCreate(ctx context.Context, d *schema.Resour
 
 	d.SetId(r.Id)
 
-	// This is a fix for a weird bug where the cluster is not immediately available on API
+	// This is a fix for a weird bug where the nodepool is not immediately available on API
+	log.Printf("[DEBUG] Waiting for nodepool %s to be available", r.Id)
+
 	bugFixWait := &resource.StateChangeConf{
 		Pending:    []string{"NOT_FOUND"},
 		Target:     []string{"FOUND"},
-		Refresh:    waitForCloudKubernetesNodePoolToBeReal(config.OVHClient, projectId, clusterId, r.Id),
+		Refresh:    waitForCloudProjectKubeNodePoolToBeReal(config.OVHClient, projectId, clusterId, r.Id),
 		Timeout:    2 * time.Minute,
 		Delay:      5 * time.Second,
 		MinTimeout: 3 * time.Second,
 	}
 
-	log.Printf("[DEBUG] Waiting for Node %s:", r)
 	_, err = bugFixWait.WaitForStateContext(ctx)
+	if err != nil {
+		diags = append(diags, diag.Diagnostic{
+			Severity:      diag.Error,
+			Summary:       "Timeout while creating nodepool",
+			Detail:        err.Error(),
+			AttributePath: nil,
+		})
+		return
+	}
 
-	log.Printf("[DEBUG] Waiting for Node %s:", r)
+	log.Printf("[DEBUG] Waiting for nodepool %s to be READY", r.Id)
 
 	stateConf := &resource.StateChangeConf{
 		Pending:    []string{"INSTALLING", "UPDATING", "REDEPLOYING", "RESIZING"},
 		Target:     []string{"READY"},
-		Refresh:    waitForCloudKubernetesNodePoolActive(config.OVHClient, projectId, clusterId, r.Id),
+		Refresh:    waitForCloudProjectKubeNodePoolActive(config.OVHClient, projectId, clusterId, r.Id),
 		Timeout:    10 * time.Minute,
 		Delay:      5 * time.Second,
 		MinTimeout: 3 * time.Second,
@@ -215,22 +230,23 @@ func resourceCloudKubernetesNodePoolCreate(ctx context.Context, d *schema.Resour
 		{
 			diags = append(diags, diag.Diagnostic{
 				Severity:      diag.Error,
-				Summary:       "Failed to get node pool ready",
+				Summary:       "Timeout while waiting nodepool to be READY",
 				Detail:        err.Error(),
 				AttributePath: nil,
 			})
 			return
 		}
 	}
-	log.Printf("[DEBUG] Created User %s", r)
+
+	log.Printf("[DEBUG] nodepool %s is READY", r.Id)
 
 	d.SetId(r.Id)
-	err = resourceCloudKubernetesNodePoolRead(d, meta)
+	err = resourceCloudProjectKubeNodePoolRead(d, meta)
 
 	if err != nil {
 		diags = append(diags, diag.Diagnostic{
 			Severity:      diag.Error,
-			Summary:       "Failed to read node pool",
+			Summary:       "Failed to read nodepool",
 			Detail:        err.Error(),
 			AttributePath: nil,
 		})
@@ -242,44 +258,45 @@ func resourceCloudKubernetesNodePoolCreate(ctx context.Context, d *schema.Resour
 	return nil
 }
 
-func resourceCloudKubernetesNodePoolRead(d *schema.ResourceData, meta interface{}) error {
+func resourceCloudProjectKubeNodePoolRead(d *schema.ResourceData, meta interface{}) error {
 	config := meta.(*Config)
 
 	projectId := d.Get("project_id").(string)
 	clusterId := d.Get("cluster_id").(string)
 
-	d.Partial(true)
-	r := &CloudKubernetesNodePoolResponse{}
+	r := &CloudProjectKubeNodePoolResponse{}
 
-	log.Printf("[DEBUG] Will read public cloud kubernetes cluster %s from project: %s", d.Id(), projectId)
+	d.Partial(true)
 
 	endpoint := fmt.Sprintf("/cloud/project/%s/kube/%s/nodepool/%s", projectId, clusterId, d.Id())
 
+	log.Printf("[DEBUG] Will read nodepool %s from cluster %s in project %s", d.Id(), clusterId, projectId)
+
 	err := config.OVHClient.Get(endpoint, r)
 	if err != nil {
-		return fmt.Errorf("calling Get %s:\n\t %q", endpoint, err)
+		return fmt.Errorf("fail to get nodepool on %s: %v", endpoint, err)
 	}
 
-	err = readCloudKubernetesNodePool(projectId, config, d, r)
+	err = readCloudProjectKubeNodePool(projectId, config, d, r)
 	if err != nil {
-		return fmt.Errorf("error while reading cluster data %s:\n\t %q", d.Id(), err)
+		return fmt.Errorf("error while reading nodepool data %s: %v", d.Id(), err)
 	}
 	d.Partial(false)
 
-	log.Printf("[DEBUG] Read Public Cloud Kubernetes Node %s", r)
+	log.Printf("[DEBUG] Read nodepool: %+v", r)
 	return nil
 }
 
-func resourceCloudKubernetesNodePoolDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) (diags diag.Diagnostics) {
+func resourceCloudProjectKubeNodePoolDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) (diags diag.Diagnostics) {
 	config := meta.(*Config)
 
 	projectId := d.Get("project_id").(string)
 	clusterId := d.Get("cluster_id").(string)
 	id := d.Id()
 
-	log.Printf("[DEBUG] Will delete public cloud kubernetes cluster %s from project: %s", id, projectId)
-
 	endpoint := fmt.Sprintf("/cloud/project/%s/kube/%s/nodepool/%s", projectId, clusterId, id)
+
+	log.Printf("[DEBUG] Will delete nodepool %s from cluster %s in project %s", id, clusterId, projectId)
 
 	err := config.OVHClient.Delete(endpoint, nil)
 	if err != nil {
@@ -287,12 +304,12 @@ func resourceCloudKubernetesNodePoolDelete(ctx context.Context, d *schema.Resour
 		return
 	}
 
-	log.Printf("[DEBUG] Deleting Public Cloud Kubernetes Node %s from project %s:", id, projectId)
+	log.Printf("[DEBUG] Waiting for nodepool %s to be DELETED", id)
 
 	stateConf := &resource.StateChangeConf{
 		Pending:    []string{"DELETING"},
 		Target:     []string{"DELETED"},
-		Refresh:    waitForCloudKubernetesNodePoolDelete(config.OVHClient, projectId, clusterId, id),
+		Refresh:    waitForCloudProjectKubeNodePoolDelete(config.OVHClient, projectId, clusterId, id),
 		Timeout:    45 * time.Minute,
 		Delay:      10 * time.Second,
 		MinTimeout: 3 * time.Second,
@@ -300,33 +317,34 @@ func resourceCloudKubernetesNodePoolDelete(ctx context.Context, d *schema.Resour
 
 	_, err = stateConf.WaitForStateContext(ctx)
 	if err != nil {
-		diags = append(diags, diag.Errorf("deleting Public Cloud Kubernetes Node %s from project %s", id, projectId)...)
+		diags = append(diags, diag.Errorf("timeout while deleting nodepool %s from project %s", id, projectId)...)
 		return
 	}
-	log.Printf("[DEBUG] Deleted Public Cloud Kubernetes Node %s from project %s", id, projectId)
 
 	d.SetId("")
+
+	log.Printf("[DEBUG] nodepool %s is DELETED", id)
 
 	return
 }
 
-func cloudKubernetesNodePoolExists(projectId string, clusterId string, id string, c *ovh.Client) error {
-	r := &CloudKubernetesNodePoolResponse{}
-
-	log.Printf("[DEBUG] Will read public cloud Kubernetes Node for project: %s, id: %s", projectId, id)
+func cloudProjectKubeNodePoolExists(projectId string, clusterId string, id string, c *ovh.Client) error {
+	r := &CloudProjectKubeNodePoolResponse{}
 
 	endpoint := fmt.Sprintf("/cloud/project/%s/kube/%s/nodepool/%s", projectId, clusterId, id)
 
+	log.Printf("[DEBUG] Will check if nodepool %s from cluster %s in project %s exist", id, clusterId, projectId)
+
 	err := c.Get(endpoint, r)
 	if err != nil {
-		return fmt.Errorf("calling Get %s:\n\t %q", endpoint, err)
+		return fmt.Errorf("fail to get nodepool on %s: %v", endpoint, err)
 	}
-	log.Printf("[DEBUG] Read public cloud Kubernetes Node: %s", r)
+	log.Printf("[DEBUG] Read nodepool: %+v", r)
 
 	return nil
 }
 
-func readCloudKubernetesNodePool(projectId string, config *Config, d *schema.ResourceData, cluster *CloudKubernetesNodePoolResponse) (err error) {
+func readCloudProjectKubeNodePool(projectId string, config *Config, d *schema.ResourceData, cluster *CloudProjectKubeNodePoolResponse) (err error) {
 	_ = d.Set("name", cluster.Name)
 	_ = d.Set("flavor", cluster.Flavor)
 	_ = d.Set("desired_nodes", cluster.DesiredNodes)
@@ -339,54 +357,49 @@ func readCloudKubernetesNodePool(projectId string, config *Config, d *schema.Res
 	return
 }
 
-func waitForCloudKubernetesNodePoolActive(c *ovh.Client, projectId, clusterId string, id string) resource.StateRefreshFunc {
+func waitForCloudProjectKubeNodePoolActive(c *ovh.Client, projectId, clusterId string, id string) resource.StateRefreshFunc {
 	return func() (interface{}, string, error) {
-		r := &CloudKubernetesNodeResponse{}
+		r := &CloudProjectKubeNodeResponse{}
 		endpoint := fmt.Sprintf("/cloud/project/%s/kube/%s/nodepool/%s", projectId, clusterId, id)
 		err := c.Get(endpoint, r)
 		if err != nil {
 			return r, "", err
 		}
 
-		log.Printf("[DEBUG] Pending User: %s", r)
 		return r, r.Status, nil
 	}
 }
 
-func waitForCloudKubernetesNodePoolDelete(c *ovh.Client, projectId, clusterId string, id string) resource.StateRefreshFunc {
+func waitForCloudProjectKubeNodePoolDelete(c *ovh.Client, projectId, clusterId string, id string) resource.StateRefreshFunc {
 	return func() (interface{}, string, error) {
-		r := &CloudKubernetesNodeResponse{}
+		r := &CloudProjectKubeNodeResponse{}
 		endpoint := fmt.Sprintf("/cloud/project/%s/kube/%s/nodepool/%s", projectId, clusterId, id)
 		err := c.Get(endpoint, r)
 		if err != nil {
 			if err.(*ovh.APIError).Code == 404 {
-				log.Printf("[DEBUG] kubernetes cluster %s on project %s deleted", clusterId, projectId)
 				return r, "DELETED", nil
 			} else {
 				return r, "", err
 			}
 		}
 
-		log.Printf("[DEBUG] Pending Kubernetes Node: %s", r)
 		return r, r.Status, nil
 	}
 }
 
-func waitForCloudKubernetesNodePoolToBeReal(client *ovh.Client, projectId string, clusterId string, id string) resource.StateRefreshFunc {
+func waitForCloudProjectKubeNodePoolToBeReal(client *ovh.Client, projectId string, clusterId string, id string) resource.StateRefreshFunc {
 	return func() (interface{}, string, error) {
-		r := &CloudKubernetesNodeResponse{}
+		r := &CloudProjectKubeNodeResponse{}
 		endpoint := fmt.Sprintf("/cloud/project/%s/kube/%s/nodepool/%s", projectId, clusterId, id)
 		err := client.Get(endpoint, r)
 		if err != nil {
 			if err.(*ovh.APIError).Code == 404 {
-				log.Printf("[DEBUG] kubernetes cluster %s on project %s deleted", id, projectId)
 				return r, "NOT_FOUND", nil
 			} else {
 				return r, "", err
 			}
 		}
 
-		log.Printf("[DEBUG] Pending Kubernetes Node: %s", r)
 		return r, "FOUND", nil
 	}
 }

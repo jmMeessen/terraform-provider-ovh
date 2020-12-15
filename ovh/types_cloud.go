@@ -177,7 +177,7 @@ func (s *CloudServiceStatusResponse) String() string {
 	return fmt.Sprintf("%s: %s", s.Name, s.Status)
 }
 
-type PublicCloudKubernetesClusterResponse struct {
+type PublicCloudProjectKubeResponse struct {
 	ControlPlaneIsUpToDate bool     `json:"controlPlaneIsUpToDate"`
 	Id                     string   `json:"id"`
 	IsUpToDate             bool     `json:"isUpToDate"`
@@ -191,15 +191,15 @@ type PublicCloudKubernetesClusterResponse struct {
 	Version                string   `json:"version"`
 }
 
-func (s *PublicCloudKubernetesClusterResponse) String() string {
+func (s *PublicCloudProjectKubeResponse) String() string {
 	return fmt.Sprintf("%s(%s): %s", s.Name, s.Id, s.Status)
 }
 
-type CloudKubernetesKubeConfigResponse struct {
+type CloudProjectKubeKubeConfigResponse struct {
 	Content string `json:"content"`
 }
 
-type CloudKubernetesNodeResponse struct {
+type CloudProjectKubeNodeResponse struct {
 	Id         string `json:"id"`
 	ProjectId  string `json:"projectId"`
 	InstanceId string `json:"instanceId"`
@@ -210,16 +210,11 @@ type CloudKubernetesNodeResponse struct {
 	Version    string `json:"version"`
 }
 
-func (n *CloudKubernetesNodeResponse) String() string {
+func (n *CloudProjectKubeNodeResponse) String() string {
 	return fmt.Sprintf("%s(%s): %s", n.Name, n.Id, n.Status)
 }
 
-type CloudKubernetesNodeCreationRequest struct {
-	FlavorName string `json:"flavorName"`
-	Name       string `json:"name"`
-}
-
-type CloudKubernetesNodePoolCreationRequest struct {
+type CloudProjectKubeNodePoolCreationRequest struct {
 	DesiredNodes  int    `json:"desiredNodes"`
 	MaxNodes      int    `json:"maxNodes"`
 	MinNodes      int    `json:"minNodes"`
@@ -229,13 +224,13 @@ type CloudKubernetesNodePoolCreationRequest struct {
 	AntiAffinity  bool   `json:"antiAffinity"`
 }
 
-type CloudKubernetesNodePoolUpdateRequest struct {
+type CloudProjectKubeNodePoolUpdateRequest struct {
 	DesiredNodes int `json:"desiredNodes"`
 	MaxNodes     int `json:"maxNodes"`
 	MinNodes     int `json:"minNodes"`
 }
 
-type CloudKubernetesNodePoolResponse struct {
+type CloudProjectKubeNodePoolResponse struct {
 	Id             string `json:"id"`
 	ProjectId      string `json:"projectId"`
 	Name           string `json:"name"`

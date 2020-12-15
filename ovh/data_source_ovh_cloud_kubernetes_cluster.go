@@ -7,9 +7,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
-func dataSourceCloudKubernetesCluster() *schema.Resource {
+func dataSourceCloudProjectKube() *schema.Resource {
 	return &schema.Resource{
-		Read: dataSourceCloudKubernetesClusterRead,
+		Read: dataSourceCloudProjectKubeRead,
 		Schema: map[string]*schema.Schema{
 			"project_id": {
 				Type:        schema.TypeString,
@@ -93,7 +93,7 @@ func dataSourceCloudKubernetesCluster() *schema.Resource {
 	}
 }
 
-func dataSourceCloudKubernetesClusterRead(d *schema.ResourceData, meta interface{}) error {
+func dataSourceCloudProjectKubeRead(d *schema.ResourceData, meta interface{}) error {
 	config := meta.(*Config)
 	projectId := d.Get("project_id").(string)
 	name := d.Get("name").(string)
@@ -107,7 +107,7 @@ func dataSourceCloudKubernetesClusterRead(d *schema.ResourceData, meta interface
 		return err
 	}
 
-	err = readCloudKubernetesCluster(projectId, config, d, &cluster)
+	err = readCloudProjectKube(projectId, config, d, &cluster)
 
 	if err != nil {
 		return fmt.Errorf("error while reading cloud config: %s", err)
@@ -119,8 +119,8 @@ func dataSourceCloudKubernetesClusterRead(d *schema.ResourceData, meta interface
 	return nil
 }
 
-func findKubernetesClusterByName(config *Config, projectId string, name string) (cluster PublicCloudKubernetesClusterResponse, err error) {
-	cluster = PublicCloudKubernetesClusterResponse{}
+func findKubernetesClusterByName(config *Config, projectId string, name string) (cluster PublicCloudProjectKubeResponse, err error) {
+	cluster = PublicCloudProjectKubeResponse{}
 	response := []string{}
 	endpoint := fmt.Sprintf("/cloud/project/%s/kube", projectId)
 	err = config.OVHClient.Get(endpoint, &response)

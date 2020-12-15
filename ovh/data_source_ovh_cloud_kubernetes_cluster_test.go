@@ -9,7 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 )
 
-func TestAccPublicCloudKubernetesClusterDataSource_basic(t *testing.T) {
+func TestAccPublicCloudProjectKubeDataSource_basic(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheckKubernetes(t)
@@ -17,16 +17,16 @@ func TestAccPublicCloudKubernetesClusterDataSource_basic(t *testing.T) {
 		Providers: testAccProviders,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccPublicCloudKubernetesClusterDatasourceConfig,
+				Config: testAccPublicCloudProjectKubeDatasourceConfig,
 				Check: resource.ComposeTestCheckFunc(
-					testAccPublicCloudKubernetesClusterDatasource("data.ovh_cloud_kubernetes_cluster.cluster"),
+					testAccPublicCloudProjectKubeDatasource("data.ovh_cloud_project_kube.cluster"),
 				),
 			},
 		},
 	})
 }
 
-func testAccPublicCloudKubernetesClusterDatasource(n string) resource.TestCheckFunc {
+func testAccPublicCloudProjectKubeDatasource(n string) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		_, ok := s.RootModule().Resources[n]
 
@@ -38,8 +38,8 @@ func testAccPublicCloudKubernetesClusterDatasource(n string) resource.TestCheckF
 	}
 }
 
-var testAccPublicCloudKubernetesClusterDatasourceConfig = fmt.Sprintf(`
-data "ovh_cloud_kubernetes_cluster" "cluster" {
+var testAccPublicCloudProjectKubeDatasourceConfig = fmt.Sprintf(`
+data "ovh_cloud_project_kube" "cluster" {
   project_id = "%s"
   name = "%s"
 }

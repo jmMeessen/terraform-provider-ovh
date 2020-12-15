@@ -2,25 +2,26 @@ package ovh
 
 import (
 	"fmt"
-	"k8s.io/client-go/tools/clientcmd"
 	"log"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/ovh/go-ovh/ovh"
+	"github.com/ovh/terraform-provider-ovh/ovh/helpers"
 )
 
-func resourceCloudKubernetesCluster() *schema.Resource {
+func resourceCloudProjectKube() *schema.Resource {
 	return &schema.Resource{
-		Create: resourceCloudKubernetesClusterCreate,
-		Read:   resourceCloudKubernetesClusterRead,
-		Delete: resourceCloudKubernetesClusterDelete,
+		Create: resourceCloudProjectKubeCreate,
+		Read:   resourceCloudProjectKubeRead,
+		Delete: resourceCloudProjectKubeDelete,
 
 		Importer: &schema.ResourceImporter{
 			State: func(d *schema.ResourceData, meta interface{}) ([]*schema.ResourceData, error) {
-				err := resourceCloudKubernetesClusterRead(d, meta)
+				err := resourceCloudProjectKubeRead(d, meta)
 				return []*schema.ResourceData{d}, err
 			},
 		},
@@ -59,9 +60,15 @@ func resourceCloudKubernetesCluster() *schema.Resource {
 			},
 			"region": {
 				Type:     schema.TypeString,
-				Default:  "GRA5",
 				Optional: true,
 				ForceNew: true,
+				ValidateFunc: func(v interface{}, k string) (ws []string, errors []error) {
+					err := helpers.ValidateKubeRegion(v.(string))
+					if err != nil {
+						errors = append(errors, err)
+					}
+					return
+				},
 			},
 			"status": {
 				Type:     schema.TypeString,
@@ -100,32 +107,37 @@ func resourceCloudKubernetesCluster() *schema.Resource {
 				Type:     schema.TypeString,
 				Required: true,
 				ForceNew: true,
+				ValidateFunc: func(v interface{}, k string) (ws []string, errors []error) {
+					err := helpers.ValidateKubeVersion(v.(string))
+					if err != nil {
+						errors = append(errors, err)
+					}
+					return
+				},
 			},
 		},
 	}
 }
 
-type PublicCloudKubernetesClusterCreateOpts struct {
+type PublicCloudProjectKubeCreateOpts struct {
 	Name    string `json:"name"`
 	Region  string `json:"region"`
 	Version string `json:"version"`
 }
 
-func resourceCloudKubernetesClusterCreate(d *schema.ResourceData, meta interface{}) error {
+func resourceCloudProjectKubeCreate(d *schema.ResourceData, meta interface{}) error {
 	config := meta.(*Config)
 
 	projectId := d.Get("project_id").(string)
-	params := &PublicCloudKubernetesClusterCreateOpts{
-		Name: d.Get("name").(string),
-		// TODO: Write check to ensure selected region is available for Kubernetes cluster
-		Region: d.Get("region").(string),
-		// TODO: Write check to ensure version is supported
+	params := &PublicCloudProjectKubeCreateOpts{
+		Name:    d.Get("name").(string),
+		Region:  d.Get("region").(string),
 		Version: d.Get("version").(string),
 	}
 
-	r := &PublicCloudKubernetesClusterResponse{}
+	r := &PublicCloudProjectKubeResponse{}
 
-	log.Printf("[DEBUG] Will create public cloud kubernetes cluster: %s", params)
+	log.Printf("[DEBUG] Will create kubernetes cluster: %s", params)
 
 	d.Partial(true)
 
@@ -137,24 +149,28 @@ func resourceCloudKubernetesClusterCreate(d *schema.ResourceData, meta interface
 	}
 
 	// This is a fix for a weird bug where the cluster is not immediately available on API
+	log.Printf("[DEBUG] Waiting for cluster %s to be available", r.Id)
+
 	bugFixWait := &resource.StateChangeConf{
 		Pending:    []string{"NOT_FOUND"},
 		Target:     []string{"FOUND"},
-		Refresh:    waitForCloudKubernetesClusterToBeReal(config.OVHClient, projectId, r.Id),
+		Refresh:    waitForCloudProjectKubeToBeReal(config.OVHClient, projectId, r.Id),
 		Timeout:    30 * time.Minute,
 		Delay:      5 * time.Second,
 		MinTimeout: 3 * time.Second,
 	}
 
-	log.Printf("[DEBUG] Waiting for Cluster %s:", r)
 	_, err = bugFixWait.WaitForState()
+	if err != nil {
+		return fmt.Errorf("timeout while creating cluster %s: %v", r.Id, err)
+	}
 
-	log.Printf("[DEBUG] Waiting for Cluster %s:", r)
+	log.Printf("[DEBUG] Waiting for cluster %s to be READY", r.Id)
 
 	stateConf := &resource.StateChangeConf{
 		Pending:    []string{"INSTALLING"},
 		Target:     []string{"READY"},
-		Refresh:    waitForCloudKubernetesClusterActive(config.OVHClient, projectId, r.Id),
+		Refresh:    waitForCloudProjectKubeActive(config.OVHClient, projectId, r.Id),
 		Timeout:    20 * time.Minute,
 		Delay:      5 * time.Second,
 		MinTimeout: 3 * time.Second,
@@ -162,15 +178,15 @@ func resourceCloudKubernetesClusterCreate(d *schema.ResourceData, meta interface
 
 	_, err = stateConf.WaitForState()
 	if err != nil {
-		return fmt.Errorf("waiting for user (%s): %s", params, err)
+		return fmt.Errorf("timeout while waiting cluster %s to be READY: %v", r.Id, err)
 	}
-	log.Printf("[DEBUG] Created User %s", r)
+	log.Printf("[DEBUG] cluster %s is READY", r.Id)
 
 	d.SetId(r.Id)
-	err = resourceCloudKubernetesClusterRead(d, meta)
+	err = resourceCloudProjectKubeRead(d, meta)
 
 	if err != nil {
-		return fmt.Errorf("error while reading cloud config: %s", err)
+		return fmt.Errorf("error while reading cluster: %s", err)
 	}
 
 	d.Partial(false)
@@ -178,15 +194,15 @@ func resourceCloudKubernetesClusterCreate(d *schema.ResourceData, meta interface
 	return nil
 }
 
-func resourceCloudKubernetesClusterRead(d *schema.ResourceData, meta interface{}) error {
+func resourceCloudProjectKubeRead(d *schema.ResourceData, meta interface{}) error {
 	config := meta.(*Config)
 
 	projectId := d.Get("project_id").(string)
 
 	d.Partial(true)
-	r := &PublicCloudKubernetesClusterResponse{}
+	r := &PublicCloudProjectKubeResponse{}
 
-	log.Printf("[DEBUG] Will read public cloud kubernetes cluster %s from project: %s", d.Id(), projectId)
+	log.Printf("[DEBUG] Will read cluster %s from project: %s", d.Id(), projectId)
 
 	endpoint := fmt.Sprintf("/cloud/project/%s/kube/%s", projectId, d.Id())
 
@@ -195,23 +211,23 @@ func resourceCloudKubernetesClusterRead(d *schema.ResourceData, meta interface{}
 		return fmt.Errorf("calling Get %s:\n\t %q", endpoint, err)
 	}
 
-	err = readCloudKubernetesCluster(projectId, config, d, r)
+	err = readCloudProjectKube(projectId, config, d, r)
 	if err != nil {
 		return fmt.Errorf("error while reading cluster data %s:\n\t %q", d.Id(), err)
 	}
 	d.Partial(false)
 
-	log.Printf("[DEBUG] Read Public Cloud Kubernetes Cluster %s", r)
+	log.Printf("[DEBUG] Read cluster %+v", r)
 	return nil
 }
 
-func resourceCloudKubernetesClusterDelete(d *schema.ResourceData, meta interface{}) error {
+func resourceCloudProjectKubeDelete(d *schema.ResourceData, meta interface{}) error {
 	config := meta.(*Config)
 
 	projectId := d.Get("project_id").(string)
 	id := d.Id()
 
-	log.Printf("[DEBUG] Will delete public cloud kubernetes cluster %s from project: %s", id, projectId)
+	log.Printf("[DEBUG] Will delete kubernetes cluster %s from project: %s", id, projectId)
 
 	endpoint := fmt.Sprintf("/cloud/project/%s/kube/%s", projectId, id)
 
@@ -220,12 +236,12 @@ func resourceCloudKubernetesClusterDelete(d *schema.ResourceData, meta interface
 		return fmt.Errorf("calling Delete %s:\n\t %q", endpoint, err)
 	}
 
-	log.Printf("[DEBUG] Deleting Public Cloud Kubernetes Cluster %s from project %s:", id, projectId)
+	log.Printf("[DEBUG] Waiting for cluster %s to be DELETED", id)
 
 	stateConf := &resource.StateChangeConf{
 		Pending:    []string{"DELETING"},
 		Target:     []string{"DELETED"},
-		Refresh:    waitForCloudKubernetesClusterDelete(config.OVHClient, projectId, id),
+		Refresh:    waitForCloudProjectKubeDelete(config.OVHClient, projectId, id),
 		Timeout:    10 * time.Minute,
 		Delay:      10 * time.Second,
 		MinTimeout: 3 * time.Second,
@@ -233,19 +249,20 @@ func resourceCloudKubernetesClusterDelete(d *schema.ResourceData, meta interface
 
 	_, err = stateConf.WaitForState()
 	if err != nil {
-		return fmt.Errorf("deleting Public Cloud Kubernetes Cluster %s from project %s", id, projectId)
+		return fmt.Errorf("timeout while waiting cluster %s to be deleted: %v", id, err)
 	}
-	log.Printf("[DEBUG] Deleted Public Cloud Kubernetes Cluster %s from project %s", id, projectId)
 
 	d.SetId("")
+
+	log.Printf("[DEBUG] cluster %s is DELETED", id)
 
 	return nil
 }
 
-func cloudKubernetesClusterExists(projectId, id string, c *ovh.Client) error {
-	r := &PublicCloudKubernetesClusterResponse{}
+func cloudProjectKubeExists(projectId, id string, c *ovh.Client) error {
+	r := &PublicCloudProjectKubeResponse{}
 
-	log.Printf("[DEBUG] Will read public cloud Kubernetes Cluster for project: %s, id: %s", projectId, id)
+	log.Printf("[DEBUG] Will read kubernetes cluster for project: %s, id: %s", projectId, id)
 
 	endpoint := fmt.Sprintf("/cloud/project/%s/kube/%s", projectId, id)
 
@@ -253,12 +270,12 @@ func cloudKubernetesClusterExists(projectId, id string, c *ovh.Client) error {
 	if err != nil {
 		return fmt.Errorf("calling Get %s:\n\t %q", endpoint, err)
 	}
-	log.Printf("[DEBUG] Read public cloud Kubernetes Cluster: %s", r)
+	log.Printf("[DEBUG] Read cluster: %+v", r)
 
 	return nil
 }
 
-func readCloudKubernetesCluster(projectId string, config *Config, d *schema.ResourceData, cluster *PublicCloudKubernetesClusterResponse) (err error) {
+func readCloudProjectKube(projectId string, config *Config, d *schema.ResourceData, cluster *PublicCloudProjectKubeResponse) (err error) {
 	_ = d.Set("control_plane_is_up_to_date", cluster.ControlPlaneIsUpToDate)
 	_ = d.Set("is_up_to_date", cluster.IsUpToDate)
 	_ = d.Set("name", cluster.Name)
@@ -272,7 +289,7 @@ func readCloudKubernetesCluster(projectId string, config *Config, d *schema.Reso
 
 	if d.IsNewResource() {
 
-		kubeconfigRaw := CloudKubernetesKubeConfigResponse{}
+		kubeconfigRaw := CloudProjectKubeKubeConfigResponse{}
 		endpoint := fmt.Sprintf("/cloud/project/%s/kube/%s/kubeconfig", projectId, cluster.Id)
 		err = config.OVHClient.Post(endpoint, nil, &kubeconfigRaw)
 
@@ -298,54 +315,49 @@ func readCloudKubernetesCluster(projectId string, config *Config, d *schema.Reso
 	return
 }
 
-func waitForCloudKubernetesClusterActive(c *ovh.Client, projectId, cloudKubernetesClusterId string) resource.StateRefreshFunc {
+func waitForCloudProjectKubeActive(c *ovh.Client, projectId, cloudProjectKubeId string) resource.StateRefreshFunc {
 	return func() (interface{}, string, error) {
-		r := &PublicCloudKubernetesClusterResponse{}
-		endpoint := fmt.Sprintf("/cloud/project/%s/kube/%s", projectId, cloudKubernetesClusterId)
+		r := &PublicCloudProjectKubeResponse{}
+		endpoint := fmt.Sprintf("/cloud/project/%s/kube/%s", projectId, cloudProjectKubeId)
 		err := c.Get(endpoint, r)
 		if err != nil {
 			return r, "", err
 		}
 
-		log.Printf("[DEBUG] Pending User: %s", r)
 		return r, r.Status, nil
 	}
 }
 
-func waitForCloudKubernetesClusterDelete(c *ovh.Client, projectId, CloudKubernetesClusterId string) resource.StateRefreshFunc {
+func waitForCloudProjectKubeDelete(c *ovh.Client, projectId, CloudProjectKubeId string) resource.StateRefreshFunc {
 	return func() (interface{}, string, error) {
-		r := &PublicCloudKubernetesClusterResponse{}
-		endpoint := fmt.Sprintf("/cloud/project/%s/kube/%s", projectId, CloudKubernetesClusterId)
+		r := &PublicCloudProjectKubeResponse{}
+		endpoint := fmt.Sprintf("/cloud/project/%s/kube/%s", projectId, CloudProjectKubeId)
 		err := c.Get(endpoint, r)
 		if err != nil {
 			if err.(*ovh.APIError).Code == 404 {
-				log.Printf("[DEBUG] kubernetes cluster %s on project %s deleted", CloudKubernetesClusterId, projectId)
 				return r, "DELETED", nil
 			} else {
 				return r, "", err
 			}
 		}
 
-		log.Printf("[DEBUG] Pending Kubernetes Cluster: %s", r)
 		return r, r.Status, nil
 	}
 }
 
-func waitForCloudKubernetesClusterToBeReal(client *ovh.Client, projectId string, id string) resource.StateRefreshFunc {
+func waitForCloudProjectKubeToBeReal(client *ovh.Client, projectId string, id string) resource.StateRefreshFunc {
 	return func() (interface{}, string, error) {
-		r := &PublicCloudKubernetesClusterResponse{}
+		r := &PublicCloudProjectKubeResponse{}
 		endpoint := fmt.Sprintf("/cloud/project/%s/kube/%s", projectId, id)
 		err := client.Get(endpoint, r)
 		if err != nil {
 			if err.(*ovh.APIError).Code == 404 {
-				log.Printf("[DEBUG] kubernetes cluster %s on project %s deleted", id, projectId)
 				return r, "NOT_FOUND", nil
 			} else {
 				return r, "", err
 			}
 		}
 
-		log.Printf("[DEBUG] Pending Kubernetes Cluster: %s", r)
 		return r, "FOUND", nil
 	}
 }

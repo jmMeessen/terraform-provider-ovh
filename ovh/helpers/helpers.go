@@ -180,6 +180,26 @@ func ValidateDedicatedCephACLFamily(value string) error {
 	})
 }
 
+func ValidateKubeRegion(value string) error {
+	return ValidateStringEnum(value, []string{
+		"BHS5",
+		"GRA5",
+		"GRA7",
+		"SBG5",
+		"SGP1",
+		"SYD1",
+		"WAW1",
+	})
+}
+
+func ValidateKubeVersion(value string) error {
+	return ValidateStringEnum(value, []string{
+		"1.17",
+		"1.18",
+		"1.19",
+	})
+}
+
 func GetNilBoolPointerFromData(data interface{}, id string) *bool {
 	if resourceData, tok := data.(*schema.ResourceData); tok {
 		return GetNilBoolPointer(resourceData.Get(id).(bool))

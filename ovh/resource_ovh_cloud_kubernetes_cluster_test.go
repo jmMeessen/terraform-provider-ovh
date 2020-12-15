@@ -9,8 +9,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 )
 
-var testAccPublicCloudKubernetesClusterConfig = fmt.Sprintf(`
-resource "ovh_cloud_kubernetes_cluster" "cluster" {
+var testAccPublicCloudProjectKubeConfig = fmt.Sprintf(`
+resource "ovh_cloud_project_kube" "cluster" {
 	project_id  = "%s"
   	name = "my cluster for acceptance tests"
 	region = "GRA5"
@@ -18,27 +18,27 @@ resource "ovh_cloud_kubernetes_cluster" "cluster" {
 }
 `, os.Getenv("OVH_PUBLIC_CLOUD"))
 
-func TestAccPublicCloudKubernetesCluster_basic(t *testing.T) {
+func TestAccPublicCloudProjectKube_basic(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheckCloud(t)
-			testAccCheckCloudExists(t)
+			testAccCheckCloudProjectExists(t)
 			testAccPreCheckKubernetes(t)
 		},
 		Providers:    testAccProviders,
-		CheckDestroy: testAccCheckPublicCloudKubernetesClusterDestroy,
+		CheckDestroy: testAccCheckPublicCloudProjectKubeDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccPublicCloudKubernetesClusterConfig,
+				Config: testAccPublicCloudProjectKubeConfig,
 				Check: resource.ComposeTestCheckFunc(
-					testAccCheckPublicCloudKubernetesClusterExists("ovh_cloud_kubernetes_cluster.cluster", t),
+					testAccCheckPublicCloudProjectKubeExists("ovh_cloud_project_kube.cluster", t),
 				),
 			},
 		},
 	})
 }
 
-func testAccCheckPublicCloudKubernetesClusterExists(n string, t *testing.T) resource.TestCheckFunc {
+func testAccCheckPublicCloudProjectKubeExists(n string, t *testing.T) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 		config := testAccProvider.Meta().(*Config)
 
@@ -55,18 +55,18 @@ func testAccCheckPublicCloudKubernetesClusterExists(n string, t *testing.T) reso
 			return fmt.Errorf("No Project ID is set")
 		}
 
-		return cloudKubernetesClusterExists(rs.Primary.Attributes["project_id"], rs.Primary.ID, config.OVHClient)
+		return cloudProjectKubeExists(rs.Primary.Attributes["project_id"], rs.Primary.ID, config.OVHClient)
 	}
 }
 
-func testAccCheckPublicCloudKubernetesClusterDestroy(s *terraform.State) error {
+func testAccCheckPublicCloudProjectKubeDestroy(s *terraform.State) error {
 	config := testAccProvider.Meta().(*Config)
 	for _, rs := range s.RootModule().Resources {
-		if rs.Type != "ovh_cloud_kubernetes_cluster" {
+		if rs.Type != "ovh_cloud_project_kube" {
 			continue
 		}
 
-		err := cloudKubernetesClusterExists(rs.Primary.Attributes["project_id"], rs.Primary.ID, config.OVHClient)
+		err := cloudProjectKubeExists(rs.Primary.Attributes["project_id"], rs.Primary.ID, config.OVHClient)
 		if err == nil {
 			return fmt.Errorf("cloud > Kubernetes Cluster still exists")
 		}

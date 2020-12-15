@@ -40,9 +40,9 @@ func Provider() *schema.Provider {
 		},
 
 		DataSourcesMap: map[string]*schema.Resource{
+			"ovh_cloud_project_kube":               dataSourceCloudProjectKube(),
 			"ovh_cloud_project_region":             dataSourceCloudProjectRegion(),
 			"ovh_cloud_project_regions":            dataSourceCloudProjectRegions(),
-			"ovh_cloud_kubernetes_cluster":         dataSourceCloudKubernetesCluster(),
 			"ovh_dedicated_ceph":                   dataSourceDedicatedCeph(),
 			"ovh_dedicated_installation_templates": dataSourceDedicatedInstallationTemplates(),
 			"ovh_dedicated_server":                 dataSourceDedicatedServer(),
@@ -73,11 +73,11 @@ func Provider() *schema.Provider {
 		},
 
 		ResourcesMap: map[string]*schema.Resource{
+			"ovh_cloud_project_kube":                                      resourceCloudProjectKube(),
+			"ovh_cloud_project_kube_node_pool":                            resourceCloudProjectKubeNodePool(),
 			"ovh_cloud_project_network_private":                           resourceCloudProjectNetworkPrivate(),
 			"ovh_cloud_project_network_private_subnet":                    resourceCloudProjectNetworkPrivateSubnet(),
 			"ovh_cloud_project_user":                                      resourceCloudProjectUser(),
-			"ovh_cloud_kubernetes_cluster":                                resourceCloudKubernetesCluster(),
-			"ovh_cloud_kubernetes_node_pool":                              resourceCloudKubernetesNodePool(),
 			"ovh_dedicated_ceph_acl":                                      resourceDedicatedCephACL(),
 			"ovh_dedicated_server_install_task":                           resourceDedicatedServerInstallTask(),
 			"ovh_dedicated_server_reboot_task":                            resourceDedicatedServerRebootTask(),
