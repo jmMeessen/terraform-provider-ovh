@@ -177,7 +177,17 @@ func (s *CloudServiceStatusResponse) String() string {
 	return fmt.Sprintf("%s: %s", s.Name, s.Status)
 }
 
-type PublicCloudProjectKubeResponse struct {
+type CloudProjectKubeCreateOpts struct {
+	Name    string `json:"name"`
+	Region  string `json:"region"`
+	Version string `json:"version"`
+}
+
+func (s *CloudProjectKubeCreateOpts) String() string {
+	return fmt.Sprintf("%s(%s): %s", s.Name, s.Region, s.Version)
+}
+
+type CloudProjectKubeResponse struct {
 	ControlPlaneIsUpToDate bool     `json:"controlPlaneIsUpToDate"`
 	Id                     string   `json:"id"`
 	IsUpToDate             bool     `json:"isUpToDate"`
@@ -191,7 +201,7 @@ type PublicCloudProjectKubeResponse struct {
 	Version                string   `json:"version"`
 }
 
-func (s *PublicCloudProjectKubeResponse) String() string {
+func (s *CloudProjectKubeResponse) String() string {
 	return fmt.Sprintf("%s(%s): %s", s.Name, s.Id, s.Status)
 }
 
@@ -199,22 +209,7 @@ type CloudProjectKubeKubeConfigResponse struct {
 	Content string `json:"content"`
 }
 
-type CloudProjectKubeNodeResponse struct {
-	Id         string `json:"id"`
-	ProjectId  string `json:"projectId"`
-	InstanceId string `json:"instanceId"`
-	IsUpToDate bool   `json:"isUpToDate"`
-	Name       string `json:"name"`
-	Flavor     string `json:"flavor"`
-	Status     string `json:"status"`
-	Version    string `json:"version"`
-}
-
-func (n *CloudProjectKubeNodeResponse) String() string {
-	return fmt.Sprintf("%s(%s): %s", n.Name, n.Id, n.Status)
-}
-
-type CloudProjectKubeNodePoolCreationRequest struct {
+type CloudProjectKubeNodePoolCreateOpts struct {
 	DesiredNodes  int    `json:"desiredNodes"`
 	MaxNodes      int    `json:"maxNodes"`
 	MinNodes      int    `json:"minNodes"`
@@ -224,10 +219,18 @@ type CloudProjectKubeNodePoolCreationRequest struct {
 	AntiAffinity  bool   `json:"antiAffinity"`
 }
 
-type CloudProjectKubeNodePoolUpdateRequest struct {
+func (s *CloudProjectKubeNodePoolCreateOpts) String() string {
+	return fmt.Sprintf("%s(%s): %d/%d/%d", s.Name, s.FlavorName, s.DesiredNodes, s.MinNodes, s.MaxNodes)
+}
+
+type CloudProjectKubeNodePoolUpdateOpts struct {
 	DesiredNodes int `json:"desiredNodes"`
 	MaxNodes     int `json:"maxNodes"`
 	MinNodes     int `json:"minNodes"`
+}
+
+func (s *CloudProjectKubeNodePoolUpdateOpts) String() string {
+	return fmt.Sprintf("%d/%d/%d", s.DesiredNodes, s.MinNodes, s.MaxNodes)
 }
 
 type CloudProjectKubeNodePoolResponse struct {
@@ -247,4 +250,8 @@ type CloudProjectKubeNodePoolResponse struct {
 	Status         string `json:"status"`
 	UpToDateNodes  int    `json:"upToDateNodes"`
 	UpdatedAt      string `json:"updatedAt"`
+}
+
+func (n *CloudProjectKubeNodePoolResponse) String() string {
+	return fmt.Sprintf("%s(%s): %s", n.Name, n.Id, n.Status)
 }

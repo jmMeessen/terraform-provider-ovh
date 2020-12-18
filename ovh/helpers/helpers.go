@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"fmt"
 	"net"
+	"time"
 
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/ovh/go-ovh/ovh"
 )
@@ -180,26 +182,6 @@ func ValidateDedicatedCephACLFamily(value string) error {
 	})
 }
 
-func ValidateKubeRegion(value string) error {
-	return ValidateStringEnum(value, []string{
-		"BHS5",
-		"GRA5",
-		"GRA7",
-		"SBG5",
-		"SGP1",
-		"SYD1",
-		"WAW1",
-	})
-}
-
-func ValidateKubeVersion(value string) error {
-	return ValidateStringEnum(value, []string{
-		"1.17",
-		"1.18",
-		"1.19",
-	})
-}
-
 func GetNilBoolPointerFromData(data interface{}, id string) *bool {
 	if resourceData, tok := data.(*schema.ResourceData); tok {
 		return GetNilBoolPointer(resourceData.Get(id).(bool))
@@ -368,4 +350,17 @@ func GetVrackServiceName(d *schema.ResourceData) (string, error) {
 	}
 
 	return *serviceNamePtr, nil
+}
+
+// WaitAvailable wait for a ressource to become available in the API (aka non 404)
+func WaitAvailable(client *ovh.Client, endpoint string) error {
+	return resource.Retry(30*time.Minute, func() *resource.RetryError {
+		if err := client.Get(endpoint, nil); err != nil {
+			if err.(*ovh.APIError).Code == 404 {
+				return resource.RetryableError(err)
+			}
+			return resource.NonRetryableError(err)
+		}
+		return nil
+	})
 }

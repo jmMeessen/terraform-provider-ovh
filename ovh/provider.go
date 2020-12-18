@@ -74,7 +74,7 @@ func Provider() *schema.Provider {
 
 		ResourcesMap: map[string]*schema.Resource{
 			"ovh_cloud_project_kube":                                      resourceCloudProjectKube(),
-			"ovh_cloud_project_kube_node_pool":                            resourceCloudProjectKubeNodePool(),
+			"ovh_cloud_project_kube_nodepool":                             resourceCloudProjectKubeNodePool(),
 			"ovh_cloud_project_network_private":                           resourceCloudProjectNetworkPrivate(),
 			"ovh_cloud_project_network_private_subnet":                    resourceCloudProjectNetworkPrivateSubnet(),
 			"ovh_cloud_project_user":                                      resourceCloudProjectUser(),
